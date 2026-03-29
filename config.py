@@ -33,7 +33,7 @@ NOVA_COST_LIMIT = float(os.getenv("NOVA_COST_LIMIT", "1.0"))
 FEATURE_API_SERVER = os.getenv("FEATURE_API_SERVER", "false").lower() == "true"
 API_SERVER_PORT = int(os.getenv("API_SERVER_PORT", "8765"))
 
-# Paths
+# Project paths
 BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
 LOGS_DIR = BASE_DIR / "logs"
@@ -42,8 +42,17 @@ BACKUPS_DIR = DATA_DIR / "backups"
 MEMORY_FILE = DATA_DIR / "memory.json"
 PROMPTS_DIR = BASE_DIR / "prompts"
 
+# Daemon runtime paths (~/.nova/)
+NOVA_RUNTIME_DIR = Path.home() / ".nova"
+NOVA_SOCK_PATH   = NOVA_RUNTIME_DIR / "nova.sock"
+NOVA_PID_FILE    = NOVA_RUNTIME_DIR / "nova.pid"
+NOVA_STATUS_FILE = NOVA_RUNTIME_DIR / "status.json"
+NOVA_LOG_FILE    = NOVA_RUNTIME_DIR / "logs" / "nova.log"
+NOVA_RESPONSE_FILE = NOVA_RUNTIME_DIR / "last_response.txt"
+
 # Create directories
-for d in [DATA_DIR, LOGS_DIR, SCREENSHOTS_DIR, BACKUPS_DIR]:
+for d in [DATA_DIR, LOGS_DIR, SCREENSHOTS_DIR, BACKUPS_DIR,
+          NOVA_RUNTIME_DIR, NOVA_RUNTIME_DIR / "logs"]:
     d.mkdir(parents=True, exist_ok=True)
 
 # OpenRouter base URL

@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from config import LOGS_DIR, SCREENSHOTS_DIR
+from config import LOGS_DIR, SCREENSHOTS_DIR, NOVA_STATUS_FILE, NOVA_RESPONSE_FILE
 
 logger = logging.getLogger(__name__)
 
@@ -18,11 +18,12 @@ class NOVALoop:
     MAX_RETRIES_PER_STEP = 3
     MAX_TOTAL_STEPS = 50
 
-    def __init__(self, brain, executor, memory=None, tts=None):
+    def __init__(self, brain, executor, memory=None, tts=None, context_engine=None):
         self.brain = brain
         self.executor = executor
         self.memory = memory
         self.tts = tts
+        self.context_engine = context_engine  # OS context awareness
 
         self._stop_event = threading.Event()
         self._session_log: list[dict] = []
@@ -107,14 +108,37 @@ class NOVALoop:
     # Main loop
     # ------------------------------------------------------------------
 
+    def _write_status(self, state: str, goal: str = "", step: str = ""):
+        """Write daemon status to ~/.nova/status.json for tray/overlay polling."""
+        try:
+            NOVA_STATUS_FILE.write_text(
+                json.dumps({
+                    "state": state,
+                    "goal": goal[:80],
+                    "step": step[:80],
+                    "ts": datetime.now().isoformat(),
+                }, ensure_ascii=False)
+            )
+        except OSError:
+            pass
+
     def run(self, goal: str, dry_run: bool = False) -> str:
         """Execute a goal autonomously. Returns final summary."""
         self._init_log()
         self._stop_event.clear()
         self._log({"event": "start", "goal": goal, "dry_run": dry_run})
+        self._write_status("thinking", goal=goal, step="লক্ষ্য বিশ্লেষণ")
 
         # Emit thought
         self.on_thought(f"লক্ষ্য বিশ্লেষণ করছি: {goal}")
+
+        # Gather OS context and inject into goal
+        os_context = ""
+        if self.context_engine:
+            try:
+                os_context = self.context_engine.get_context_string()
+            except Exception:
+                pass
 
         # Check memory for similar patterns
         hint = ""
@@ -130,13 +154,15 @@ class NOVALoop:
         steps = self.brain.decompose(goal + hint)
         self._log({"event": "decompose", "steps": steps})
         self.on_thought(f"{len(steps)}টি ধাপ তৈরি হয়েছে: {steps}")
+        self._write_status("working", goal=goal, step=f"{len(steps)}টি ধাপ")
 
-        # Build conversation history
+        # Build conversation history — inject OS context into first message
+        context_block = f"\n\n[OS Context]\n{os_context}" if os_context else ""
         history = [
             {
                 "role": "user",
                 "content": (
-                    f"লক্ষ্য: {goal}\n\n"
+                    f"লক্ষ্য: {goal}{context_block}\n\n"
                     f"ধাপসমূহ:\n" + "\n".join(f"{i+1}. {s}" for i, s in enumerate(steps)) +
                     f"\n\nউপলব্ধ টুল: {self.executor.list_tools()}\n"
                     "প্রতিটি পদক্ষেপে JSON ফরম্যাটে টুল কল করো: "
@@ -157,12 +183,19 @@ class NOVALoop:
 
             # Get next action from brain
             self.on_thought(f"পরবর্তী পদক্ষেপ চিন্তা করছি... (ধাপ {total_steps})")
+            self._write_status("thinking", goal=goal, step=f"ধাপ {total_steps}")
             raw_response = self.brain.call(history, task_hint=goal)
             self._log({"event": "brain_response", "step": total_steps, "raw": raw_response})
 
             # Check if done
             if "DONE:" in raw_response or raw_response.strip().startswith("DONE"):
                 summary = raw_response.split("DONE:", 1)[-1].strip() if "DONE:" in raw_response else raw_response
+                self._write_status("idle", goal=goal, step="সম্পন্ন ✓")
+                # Write last response for overlay/tray to read
+                try:
+                    NOVA_RESPONSE_FILE.write_text(summary, encoding="utf-8")
+                except OSError:
+                    pass
                 self.on_complete(summary)
                 self._log({"event": "complete", "summary": summary})
                 if self.memory:
@@ -262,6 +295,7 @@ class NOVALoop:
         else:
             msg = f"সর্বোচ্চ {self.MAX_TOTAL_STEPS}টি ধাপ সম্পন্ন হয়েছে।"
 
+        self._write_status("idle", goal=goal, step="বন্ধ")
         self.on_complete(msg)
         if self.memory:
             self.memory.save_pattern(goal, completed_steps, tools_used, success=False)
@@ -270,4 +304,5 @@ class NOVALoop:
     def stop(self):
         """Gracefully stop the current task."""
         self._stop_event.set()
+        self._write_status("idle")
         logger.info("NOVA লুপ বন্ধের অনুরোধ পাওয়া গেছে")
