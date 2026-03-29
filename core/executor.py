@@ -186,6 +186,37 @@ class Executor:
         except ImportError as e:
             logger.warning(f"টেলিগ্রাম নোটিফিকেশন লোড ব্যর্থ: {e}")
 
+        # OS controller tools (xdotool, wmctrl)
+        try:
+            from modules.os_controller import (
+                xdo_click, xdo_type, xdo_key,
+                list_windows, focus_window, close_window,
+                maximize_window, minimize_window, move_window,
+                clipboard_get_os, clipboard_set_os,
+                list_displays, set_brightness,
+                enable_autostart, disable_autostart,
+            )
+            self._map.update({
+                "xdo_click": xdo_click,
+                "xdo_type": xdo_type,
+                "xdo_key": xdo_key,
+                "list_windows": list_windows,
+                "focus_window": focus_window,
+                "close_window": close_window,
+                "maximize_window": maximize_window,
+                "minimize_window": minimize_window,
+                "move_window": move_window,
+                "clipboard_get_os": clipboard_get_os,
+                "clipboard_set_os": clipboard_set_os,
+                "list_displays": list_displays,
+                "set_brightness": set_brightness,
+                "enable_autostart": enable_autostart,
+                "disable_autostart": disable_autostart,
+            })
+            logger.info("OS কন্ট্রোলার টুল লোড সম্পন্ন")
+        except ImportError as e:
+            logger.warning(f"OS কন্ট্রোলার লোড ব্যর্থ: {e}")
+
         # Load plugins
         self._load_plugins()
 

@@ -1,0 +1,29 @@
+# NOVA v9 systemd service
+# Install: sudo cp nova.service /etc/systemd/system/nova.service
+#          sudo systemctl daemon-reload
+#          sudo systemctl enable nova
+#          sudo systemctl start nova
+#
+# Or use: ./install.sh --systemd
+
+[Unit]
+Description=NOVA v9 Autonomous OS Agent
+After=network.target graphical-session.target
+Wants=graphical-session.target
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=%h/burte4
+ExecStart=/usr/bin/python3 %h/burte4/nova_daemon.py --foreground
+ExecStop=/usr/bin/python3 %h/burte4/nova_daemon.py --stop
+Restart=on-failure
+RestartSec=3s
+StandardOutput=append:%h/.nova/daemon.log
+StandardError=append:%h/.nova/daemon.log
+Environment=DISPLAY=:0
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%U/bus
+Environment=XDG_RUNTIME_DIR=/run/user/%U
+
+[Install]
+WantedBy=default.target
